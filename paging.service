@@ -3,9 +3,10 @@ Description=SIP client that autoanswers, perfect for a Paging system
 Wants=network-online.target
 
 [Service]
-user=dan
+User=root
 Type=simple
-ExecStart=/usr/bin/python /opt/autoanswer.py
+ExecStart=/usr/bin/python /opt/autoanswer.py start
+ExecStop=/usr/bin/python /opt/autoanswer.py stop
 
 [Install]
 WantedBy=multi-user.target
