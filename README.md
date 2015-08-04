@@ -7,6 +7,7 @@ These instructions are for Debian-based Linux distributions. They should point y
 ```
 sudo apt-get install build-essential python2.7-dev python-pip libasound2-dev nano subversion git
 sudo pip install raven
+sudo pip install python-daemon
 ```
 ### Download PJSIP
 ```
