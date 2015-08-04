@@ -4,7 +4,8 @@ import pjsua as pj
 import ConfigParser
 import time
 import raven
-
+import signal
+from daemon import runner
 
 dsn = 'https://0b915e29784f479f93db6ae2870515b6:b2fb7becafdc4c259b813a8f84f5b855@sentry.finn.io/2'
 ravenclient = raven.Client(dsn)
@@ -80,44 +81,58 @@ class CallCallback(pj.CallCallback):
             ravenclient.captureException()
             print(e)
 
-
 if __name__ == "__main__":
     config = ConfigParser.SafeConfigParser()
     config.read(['paging.conf', '/etc/paging.conf', 'callpipe.conf', '/etc/callpipe.conf'] + sys.argv[1:])
 
-    try:
-        # Create library instance
-        lib = pj.Lib()
+class App():
+    def __init__(self):
+        self.stdin_path = '/dev/null'
+        self.stdout_path = '/dev/tty'
+        self.stderr_path = '/dev/tty'
+        self.pidfile_path =  '/tmp/foo.pid'
+        self.pidfile_timeout = 5
 
-        # A user agent cuz pjsip wants some shit
-        ua = pj.UAConfig()
-        ua.max_calls = 10
-        ua.user_agent = " ".join(sys.argv)
+    def run(self):
+        try:
+  	        # Create library instance
+            self.lib = pj.Lib()
 
-        # Init library with default config
-        lib.init(ua)
+            # A user agent cuz pjsip wants some shit
+            ua = pj.UAConfig()
+            ua.max_calls = 10
+            ua.user_agent = " ".join(sys.argv)
 
-        # Create UDP transport which listens to any available port
-        transport = lib.create_transport(pj.TransportType.UDP)
+            # Init library with default config
+            self.lib.init(ua)
 
-        # Start the library
-        lib.start()
+            # Create UDP transport which listens to any available port
+            transport = self.lib.create_transport(pj.TransportType.UDP)
 
-        # Create local/user-less account
-        acc = lib.create_account(pj.AccountConfig(
-            config.get("sip", "domain"),
-            config.get("sip", "user"),
-            config.get("sip", "pass")
-        ), cb=AccountCallback())
+            # Start the library
+            self.lib.start()
 
-        # Wait for ENTER before quitting
-        print("Press <ENTER> to quit")
-        sys.stdin.readline().rstrip("\r\n")
+            # Create local/user-less account
+            acc = self.lib.create_account(pj.AccountConfig(
+              config.get("sip", "domain"),
+              config.get("sip", "user"),
+              config.get("sip", "pass")
+            ), cb=AccountCallback())
 
-        # We're done, shutdown the library
-        lib.destroy()
-        lib = None
+        except pj.Error as e:
+	        ravenclient.captureException()
+	        print("Exception: %s" % str(e))
 
-    except pj.Error as e:
-        ravenclient.captureException()
-        print("Exception: %s" % str(e))
+        while True:
+ 	        time.sleep(0.2)
+
+    def cleanup(self, a, b):
+	    self.lib.destroy()
+	    self.lib = None
+
+app = App()
+daemon_runner = runner.DaemonRunner(app)
+daemon_runner.daemon_context.signal_map[signal.SIGTERM] = app.cleanup
+
+daemon_runner.do_action()
+
